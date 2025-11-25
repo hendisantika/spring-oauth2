@@ -1,33 +1,39 @@
 package com.hendisantika.springoauth2.security;
 
-import com.hendisantika.springoauth2.entity.Account;
-import com.hendisantika.springoauth2.entity.Role;
-import com.hendisantika.springoauth2.service.AccountService;
-import com.hendisantika.springoauth2.service.TokenBlackListService;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.oauth2.common.OAuth2AccessToken;
-import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
-import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
-import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
-import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
-import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
-import org.springframework.security.oauth2.provider.OAuth2Authentication;
-import org.springframework.security.oauth2.provider.TokenRequest;
-import org.springframework.security.oauth2.provider.token.DefaultTokenServices;
-import org.springframework.security.oauth2.provider.token.TokenStore;
-import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
-import org.springframework.security.oauth2.provider.token.store.JwtTokenStore;
-import org.springframework.security.oauth2.provider.token.store.KeyStoreKeyFactory;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.MediaType;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.core.oidc.OidcScopes;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
+import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
+import java.util.UUID;
 
 /**
  * Created by IntelliJ IDEA.
@@ -40,141 +46,108 @@ import org.springframework.security.oauth2.provider.token.store.KeyStoreKeyFacto
  * To change this template use File | Settings | File Templates.
  */
 @Configuration
-@EnableAuthorizationServer
-public class AuthorizationConfig extends AuthorizationServerConfigurerAdapter {
+public class AuthorizationConfig {
 
-    private Logger logger = LogManager.getLogger(AuthorizationConfig.class);
+    private static final KeyPair keyPair;
 
-    private int accessTokenValiditySeconds = 10000;
-    private int refreshTokenValiditySeconds = 30000;
-
-    @Value("${security.oauth2.resource.id}")
-    private String resourceId;
-    @Autowired
-    private AuthenticationManager authenticationManager;
-    @Autowired
-    private TokenBlackListService blackListService;
-
-    @Bean
-    public UserDetailsService userDetailsService() {
-        return new AccountService();
+    static {
+        keyPair = generateRsaKey();
     }
 
-    @Override
-    public void configure(AuthorizationServerEndpointsConfigurer endpoints) {
-        endpoints
-                .authenticationManager(this.authenticationManager)
-                .tokenServices(tokenServices())
-                .tokenStore(tokenStore())
-                .accessTokenConverter(accessTokenConverter());
-    }
-
-    @Override
-    public void configure(AuthorizationServerSecurityConfigurer oauthServer) {
-
-        oauthServer
-                // we're allowing access to the token only for clients with 'ROLE_TRUSTED_CLIENT' authority
-                .tokenKeyAccess("hasAuthority('ROLE_TRUSTED_CLIENT')")
-                .checkTokenAccess("hasAuthority('ROLE_TRUSTED_CLIENT')");
-
-    }
-
-    @Override
-    public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
-        clients
-                .inMemory()
-
-                .withClient("trusted-app")
-                .authorizedGrantTypes("client_credentials", "password", "refresh_token")
-                .authorities(Role.ROLE_TRUSTED_CLIENT.toString())
-                .scopes("read", "write")
-                .resourceIds(resourceId)
-                .accessTokenValiditySeconds(10)
-                .refreshTokenValiditySeconds(30000)
-                .secret("secret")
-                .and()
-                .withClient("register-app")
-                .authorizedGrantTypes("client_credentials")
-                .authorities(Role.ROLE_REGISTER.toString())
-                .scopes("registerUser")
-                .accessTokenValiditySeconds(10)
-                .refreshTokenValiditySeconds(10)
-                .resourceIds(resourceId)
-                .secret("secret");
+    private static KeyPair generateRsaKey() {
+        KeyPair kp;
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            kp = keyPairGenerator.generateKeyPair();
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+        return kp;
     }
 
     @Bean
-    public TokenStore tokenStore() {
-        return new JwtTokenStore(accessTokenConverter());
+    @Order(1)
+    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/oauth2/**", "/.well-known/**")
+                .oauth2AuthorizationServer(authorizationServer -> authorizationServer
+                        .oidc(Customizer.withDefaults())
+                )
+                .exceptionHandling(exceptions -> exceptions
+                        .defaultAuthenticationEntryPointFor(
+                                new LoginUrlAuthenticationEntryPoint("/login"),
+                                new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
+                        ))
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
 
+        return http.build();
     }
 
     @Bean
-    public JwtAccessTokenConverter accessTokenConverter() {
-        JwtAccessTokenConverter converter = new JwtAccessTokenConverter();
-        KeyStoreKeyFactory keyStoreKeyFactory =
-                new KeyStoreKeyFactory(
-                        new ClassPathResource("mykeys.jks"),
-                        "mypass".toCharArray());
-        converter.setKeyPair(keyStoreKeyFactory.getKeyPair("mykeys"));
-        return converter;
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     @Bean
-    @Primary
-    public DefaultTokenServices tokenServices() {
-        MyTokenService tokenService = new MyTokenService(blackListService);
-        tokenService.setTokenStore(tokenStore());
-        tokenService.setSupportRefreshToken(true);
-        tokenService.setTokenEnhancer(accessTokenConverter());
-        return tokenService;
+    public RegisteredClientRepository registeredClientRepository(PasswordEncoder passwordEncoder) {
+        RegisteredClient trustedApp = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("trusted-app")
+                .clientSecret(passwordEncoder.encode("secret"))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("http://localhost:8080/login/oauth2/code/trusted-app")
+                .scope("read")
+                .scope("write")
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenTimeToLive(Duration.ofMinutes(10))
+                        .refreshTokenTimeToLive(Duration.ofMinutes(60))
+                        .build())
+                .clientSettings(ClientSettings.builder()
+                        .requireAuthorizationConsent(false)
+                        .build())
+                .build();
+
+        RegisteredClient registerApp = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("register-app")
+                .clientSecret(passwordEncoder.encode("secret"))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("registerUser")
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenTimeToLive(Duration.ofMinutes(10))
+                        .build())
+                .clientSettings(ClientSettings.builder()
+                        .requireAuthorizationConsent(false)
+                        .build())
+                .build();
+
+        return new InMemoryRegisteredClientRepository(trustedApp, registerApp);
     }
 
+    @Bean
+    public JWKSource<SecurityContext> jwkSource() {
+        RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
+        RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
+        RSAKey rsaKey = new RSAKey.Builder(publicKey)
+                .privateKey(privateKey)
+                .keyID(UUID.randomUUID().toString())
+                .build();
+        JWKSet jwkSet = new JWKSet(rsaKey);
+        return new ImmutableJWKSet<>(jwkSet);
+    }
 
-    static class MyTokenService extends DefaultTokenServices {
-        Logger logger = LogManager.getLogger(MyTokenService.class);
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        return NimbusJwtDecoder.withPublicKey((RSAPublicKey) keyPair.getPublic()).build();
+    }
 
-        private TokenBlackListService blackListService;
-
-        public MyTokenService(TokenBlackListService blackListService) {
-            this.blackListService = blackListService;
-        }
-
-        @Override
-        public OAuth2AccessToken readAccessToken(String accessToken) {
-            return super.readAccessToken(accessToken);
-        }
-
-
-        @Override
-        public OAuth2AccessToken createAccessToken(OAuth2Authentication authentication) throws AuthenticationException {
-            OAuth2AccessToken token = super.createAccessToken(authentication);
-            Account account = (Account) authentication.getPrincipal();
-            String jti = (String) token.getAdditionalInformation().get("jti");
-
-            blackListService.addToEnabledList(
-                    account.getId(),
-                    jti,
-                    token.getExpiration().getTime());
-            return token;
-        }
-
-        @Override
-        public OAuth2AccessToken refreshAccessToken(String refreshTokenValue, TokenRequest tokenRequest) throws AuthenticationException {
-            logger.info("refresh token:" + refreshTokenValue);
-            String jti = tokenRequest.getRequestParameters().get("jti");
-            try {
-                if (jti != null)
-                    if (blackListService.isBlackListed(jti)) return null;
-
-
-                OAuth2AccessToken token = super.refreshAccessToken(refreshTokenValue, tokenRequest);
-                blackListService.addToBlackList(jti);
-                return token;
-            } catch (TokenBlackListService.TokenNotFoundException e) {
-                e.printStackTrace();
-                return null;
-            }
-        }
+    @Bean
+    public AuthorizationServerSettings authorizationServerSettings() {
+        return AuthorizationServerSettings.builder().build();
     }
 }

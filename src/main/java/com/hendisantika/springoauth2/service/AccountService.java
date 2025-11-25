@@ -5,7 +5,6 @@ import com.hendisantika.springoauth2.entity.Role;
 import com.hendisantika.springoauth2.repository.AccountRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -31,11 +30,13 @@ public class AccountService implements UserDetailsService {
 
     private static final Logger logger = LogManager.getLogger(AccountService.class);
 
-    @Autowired
-    private AccountRepo accountRepo;
+    private final AccountRepo accountRepo;
+    private final PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    public AccountService(AccountRepo accountRepo, PasswordEncoder passwordEncoder) {
+        this.accountRepo = accountRepo;
+        this.passwordEncoder = passwordEncoder;
+    }
 
     @Override
     public UserDetails loadUserByUsername(String s) throws UsernameNotFoundException {
@@ -62,7 +63,7 @@ public class AccountService implements UserDetailsService {
         return accountRepo.save(account);
     }
 
-    @Transactional // To successfully remove the date @Transactional annotation must be added
+    @Transactional
     public boolean removeAuthenticatedAccount() throws UsernameNotFoundException {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         Account acct = findAccountByUsername(username);

@@ -1,18 +1,14 @@
 package com.hendisantika.springoauth2.security;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.security.SecurityProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
 
 /**
  * Created by IntelliJ IDEA.
@@ -25,46 +21,33 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * To change this template use File | Settings | File Templates.
  */
 @Configuration
-@EnableWebSecurity(debug = true)
-//@Order(SecurityProperties.ACCESS_OVERRIDE_ORDER)
-@Order(SecurityProperties.)
-public class SecurityConfig extends WebSecurityConfigurerAdapter {
-
-    @Autowired
-    public UserDetailsService userDetailsService;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
 
     @Bean
-    public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setPasswordEncoder(passwordEncoder);
-        provider.setUserDetailsService(userDetailsService());
-        return provider;
-    }
-
-    @Override
-    protected void configure(HttpSecurity http) throws Exception {
+    @Order(2)
+    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-                .formLogin().disable() // disable form authentication
-                .anonymous().disable() // disable anonymous user
-                .httpBasic().and()
-                // restricting access to authenticated users
-                .authorizeRequests().anyRequest().authenticated();
-    }
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/", "/h2-console/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS).permitAll()
+                        .requestMatchers("/api/hello").hasRole("USER")
+                        .requestMatchers("/api/me").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/api/admin").hasRole("ADMIN")
+                        .requestMatchers("/api/account/register").hasAuthority("SCOPE_registerUser")
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().authenticated()
+                )
+                .csrf(csrf -> csrf
+                        .ignoringRequestMatchers("/h2-console/**", "/oauth2/**")
+                )
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.sameOrigin())
+                )
+                .formLogin(Customizer.withDefaults())
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
 
-    @Override
-    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-        auth
-                .userDetailsService(userDetailsService)
-                .passwordEncoder(passwordEncoder);
-    }
-
-    @Override
-    @Bean
-    public AuthenticationManager authenticationManagerBean() throws Exception {
-        // provides the default AuthenticationManager as a Bean
-        return super.authenticationManagerBean();
+        return http.build();
     }
 }

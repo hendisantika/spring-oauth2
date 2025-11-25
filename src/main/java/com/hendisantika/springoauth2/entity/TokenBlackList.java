@@ -1,7 +1,7 @@
 package com.hendisantika.springoauth2.entity;
 
-import javax.persistence.Entity;
-import javax.persistence.Id;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 
 /**
  * Created by IntelliJ IDEA.
