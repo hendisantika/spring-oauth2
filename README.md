@@ -1,16 +1,27 @@
 # spring-oauth2
 
+[![Java CI with Maven](https://github.com/hendisantika/spring-oauth2/actions/workflows/maven.yml/badge.svg)](https://github.com/hendisantika/spring-oauth2/actions/workflows/maven.yml)
+![Java](https://img.shields.io/badge/Java-25-orange?logo=openjdk)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.2-6DB33F?logo=springboot)
+
 ## Using Spring OAuth2 to Secure REST APIs
 
-This project demonstrates OAuth2 authentication with Spring Boot 4.0 and Spring Security OAuth2 Authorization Server.
+This project demonstrates OAuth2 authentication with Spring Boot 4.1 and Spring Security OAuth2 Authorization Server.
 
 ### Tech Stack
 
-- **Spring Boot**: 4.0.0
-- **Spring Security**: 7.0
-- **Spring Security OAuth2 Authorization Server**: 7.0
-- **Java**: 21
+- **Spring Boot**: 4.1.2
+- **Spring Framework**: 7.0
+- **Spring Security**: 7.1
+- **Spring Security OAuth2 Authorization Server**: 7.1
+- **Java**: 25 (LTS)
+- **Build Tool**: Maven 3.10 (via Maven Wrapper)
 - **Database**: H2 (in-memory)
+
+### Prerequisites
+
+- JDK 25 (e.g. [Eclipse Temurin](https://adoptium.net/) or Amazon Corretto)
+- No local Maven installation required — use the bundled `./mvnw` wrapper
 
 ### Features
 
@@ -157,6 +168,26 @@ src/main/java/com/hendisantika/springoauth2/
 └── SpringOauth2Application.java     # Main application class
 ```
 
+### Continuous Integration
+
+GitHub Actions ([`.github/workflows/maven.yml`](.github/workflows/maven.yml)) runs on every push and pull request to
+`master` (and can be triggered manually):
+
+- Sets up **Temurin JDK 25** with Maven dependency caching
+- Builds and runs all tests with `./mvnw -B verify`
+- On pushes to `master`, submits the Maven dependency graph to GitHub for better Dependabot security alerts
+
+### Dependency Updates (Dependabot)
+
+[`.github/dependabot.yml`](.github/dependabot.yml) keeps dependencies up to date automatically:
+
+| Ecosystem      | Schedule                        | Grouping                                                   |
+|----------------|---------------------------------|------------------------------------------------------------|
+| Maven          | Daily at 21:00 (Asia/Jakarta)   | `spring-boot`, `spring`, and other minor/patch updates     |
+| GitHub Actions | Weekly, Monday 21:00 (Asia/Jakarta) | All actions grouped into a single PR                   |
+
+Dependency PRs use conventional commit prefixes (`chore(deps)`, `ci`) and are labeled `dependencies`.
+
 ### Migration Notes (from Spring Boot 2.x)
 
 This project has been migrated from the deprecated `spring-cloud-starter-oauth2` to the modern Spring Security OAuth2
@@ -171,9 +202,11 @@ Authorization Server. Key changes include:
 
 3. **Jakarta EE**: Updated from `javax.persistence` to `jakarta.persistence`.
 
-4. **JUnit**: Updated from JUnit 4 to JUnit 5.
+4. **JUnit**: Updated from JUnit 4 to JUnit 5 (Jupiter).
 
-5. **Token Endpoint**: Changed from `/oauth/token` to `/oauth2/token`.
+5. **Java**: Upgraded to Java 25 LTS.
+
+6. **Token Endpoint**: Changed from `/oauth/token` to `/oauth2/token`.
 
 ### License
 
